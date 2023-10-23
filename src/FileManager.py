@@ -130,7 +130,13 @@ class FileManager:
         Parameters:
         - path (str): The file or directory path to validate.
         """
-        os.makedirs(path, exist_ok=True)
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path, exist_ok=True)
+            except PermissionError:
+                print(f"Permission denied: Could not create directory at {path}")
+                # Exit or handle the error appropriately
+                exit(1)
 
     def read_file(self, file_location:str=None, strip=True):
         file_location = file_location if type(file_location) == str else self._file_location

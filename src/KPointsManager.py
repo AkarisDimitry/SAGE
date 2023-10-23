@@ -15,18 +15,18 @@ except ImportError as e:
 class KPointsManager(FileManager):
     def __init__(self, file_location:str=None, name:str=None, **kwargs):
         super().__init__(name=name, file_location=file_location)
-        self.num_kpoints = None
-        self.coordinate_system = None
-        self.kpoints = []
-        self.mesh_type = None
-        self.centering = None
-        self.subdivisions = None
-        self.shift = None
-        self.points_per_line = None
-        self.paths = []
-        self.numberOfTetrahedra = None
-        self.volumeWeight = None
-        self.KPOINTmesh = None
+        self._num_kpoints = None
+        self._coordinate_system = None
+        self._kpoints = []
+        self._mesh_type = None
+        self._centering = None
+        self._subdivisions = None
+        self._shift = None
+        self._points_per_line = None
+        self._paths = []
+        self._numberOfTetrahedra = None
+        self._volumeWeight = None
+        self._KPOINTmesh = None
 
     def readKPOINTS(self, file_location:str=None):
         file_location = file_location if type(file_location) == str else self.file_location

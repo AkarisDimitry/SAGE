@@ -16,9 +16,9 @@ class InputDFT(InputFileManager):
     def __init__(self, file_location:str=None, name:str=None, **kwargs):
         super().__init__(name=name, file_location=file_location)
 
-        self.parameters = {}
+        self._parameters = {}
     # "Here is a short overview of all parameters currently supported. Parameters which are used frequently are emphasized.
-        self.parameters_data = {
+        self._parameters_data = {
     'NGX': {'Default': 'Automatic', 'Class': 'FFT', 'Help': 'FFT mesh for orbitals along the x-axis.', 'Values': 'Positive integers or Automatic'},
     'NGY': {'Default': 'Automatic', 'Class': 'FFT', 'Help': 'FFT mesh for orbitals along the y-axis.', 'Values': 'Positive integers or Automatic'},
     'NGZ': {'Default': 'Automatic', 'Class': 'FFT', 'Help': 'FFT mesh for orbitals along the z-axis.', 'Values': 'Positive integers or Automatic'},
@@ -103,8 +103,11 @@ class InputDFT(InputFileManager):
     'Zab_vdW': {'Default': 'N/A', 'Class': 'Van der Waals', 'Help': 'Scaling factors for DFT-D3 method.', 'Values': 'Floating point numbers or N/A'},
     'BPARAM': {'Default': 'N/A', 'Class': 'User Defined', 'Help': 'User-defined parameter for specific models or functionals.', 'Values': 'Floating point numbers or N/A'},
     'METAGGA': {'Default': 'None', 'Class': 'XC Functional', 'Help': 'Specifies the type of meta-GGA functional to be used.', 'Values': 'None, SCAN, TPSS, ...'},
-
-    }
+    'LDAU': {'Default': 'False', 'Class': 'Electron Correlation', 'Help': 'Controls whether the DFT+U (Hubbard U) correction is applied.', 'Values': 'True or False'},
+    'LDAUL': {'Default': '-1 for all ions', 'Class': 'Electron Correlation', 'Help': 'Specifies the angular momentum quantum number l for which the DFT+U corrections are applied.', 'Values': 'Integers or a list of integers'},
+    'LDAUJ': {'Default': '0.0 for all ions', 'Class': 'Electron Correlation', 'Help': 'Specifies the value of the exchange parameter J in the DFT+U method.', 'Values': 'Floating point numbers or a list of floating point numbers'},
+    'LDAUU': {'Default': '0.0 for all ions', 'Class': 'Electron Correlation', 'Help': 'Specifies the value of the effective U parameter in the DFT+U method.', 'Values': 'Floating point numbers or a list of floating point numbers'},
+}
         '''
         # -------------------------------------------------------------------------- #
         # The GGA tag is further used to choose the appropriate exchange functional. #
@@ -173,38 +176,18 @@ class InputDFT(InputFileManager):
         self.file_location = file_location if type(file_location) == str else self.file_location
 
         lines = [n for n in self.read_file() ]
+        parameters = {}
 
         for i, line in enumerate(lines):
 
-            try:
-                if "#" in line: line = line.split("#")[0].strip()
-                if "!" in line: line = line.split("!")[0].strip()
-                if not line:    continue
-                
-                parts = [m for m in line.split(' ') if m != '' and m != '\n']
-                if len(parts) > 2 and not '#' in parts[0]:  
-                    if self.is_number(parts[2]): var_name, var_value = parts[0], float(parts[2])
-                    else: var_name, var_value = parts[0], parts[2].split('\n')[0] 
-                    self.parameters[var_name] = var_value
-                
-                if len(parts) > 1 and not '#' in parts[0] and '=' in parts[0]: 
-                    if self.is_number(parts[1]): var_name, var_value = parts[0], float(parts[1])
-                    else: var_name, var_value = parts[0].split('=')[0], parts[1].split('\n')[0] 
-                    self.parameters[var_name] = var_value
-                
-            except: print('WARNING :: can not read line {} :: '.format(i+1), line )
-
-
-            '''
-            if len(vec) > 2 and not '#' in vec[0]:  
-                if self.is_number(vec[2]): var_name, var_value = vec[0], float(vec[2])
-                else: var_name, var_value = vec[0], vec[2].split('\n')[0] 
-                self.var_assing(var_name, var_value)
-            if len(vec) > 1 and not '#' in vec[0] and '=' in vec[0]: 
-                if self.is_number(vec[1]): var_name, var_value = vec[0], float(vec[1])
-                else: var_name, var_value = vec[0].split('=')[0], vec[1].split('\n')[0] 
-                self.var_assing(var_name, var_value)
-            '''
+            #try:
+            if "#" in line: line = line.split("#")[0].strip()
+            if "!" in line: line = line.split("!")[0].strip()
+            if not line:    continue
+            
+            parts = [l.strip() for l in line.split('=')[0].strip().split(' ') if l.strip() != '' ] + [l.strip() for l in line.split('=')[1].strip().split(' ') if l.strip() != '' ]              
+            parameters[parts[0]] = ' '.join(parts[1:]) 
+        self.parameters = parameters
 
     def view(self, ):
         parametersClasification = {**{p: [] for p in self.parametersClass}, 'Others': []}
@@ -257,16 +240,16 @@ class InputDFT(InputFileManager):
                     f.write( f'\n ==== {p.center(25)} ====\n' )
                     for n in value:
                         Help = self.parameters_data[n]['Help']
-                        f.write( f"{n:<9} = {self.parameters[n]:<9} # {Help[:40]:<40}\n" )
+                        f.write( f"{n:<9} = {self.parameters[n]:<9} # {Help[:80]:<80} [...]\n" )
 
             # Write attributes to the file
             for n in self.attr_dic.keys():
                 if n in self.help.keys():   info = self.help[n]
                 else:                       info = 'unknow'
                 if self.isINT(self.attr_dic[n]):
-                    f.write( f'{n:<10.10s} : {int(self.attr_dic[n]):<10} : {info:<80.80s}[...]\n' )
+                    f.write( f'{n:<10.10s} : {int(self.attr_dic[n]):<10} : {info:<100.100s}[...]\n' )
                 else:
-                    f.write( f'{n:<10.10s} : {self.attr_dic[n]:<10.10} : {info:<80.80s}[...]\n' )
+                    f.write( f'{n:<10.10s} : {self.attr_dic[n]:<10.10} : {info:<100.100s}[...]\n' )
 
 if __name__ == "__main__":
     # How to...     

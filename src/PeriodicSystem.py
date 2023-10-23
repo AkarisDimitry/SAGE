@@ -18,16 +18,37 @@ class PeriodicSystem(AtomPositionManager):
         super().__init__(name=name, file_location=file_location)
         self._reciprocalLatticeVectors = None # [b1, b2, b3]
         self._latticeVectors = None # [a1,a2,a3]
+        self._latticeVectors_inv = None # [a1,a2,a3]
+
         self._symmetryEquivPositions = None
         self._atomCoordinateType = None  # str cartedian direct
         self._latticeParameters = None # []
         self._latticeAngles = None  # [alpha, beta, gamma]
         self._cellVolumen = None  # float
 
+        self._atomPositions_fractional = None
+
         self._latticeType = None
         self._latticeType_tolerance = 1e-4
 
-        self.is_surface = False
+        self._is_surface = False
+        self._distance_matrix = None
+
+    @property
+    def distance_matrix(self):
+        if self._distance_matrix is not None:
+            return self._distance_matrix
+        elif self._atomPositions is not None:
+            distance_matrix = np.zeros((self.atomCount, self.atomCount))
+            for i in range(self.atomCount):
+                for j in range(i, self.atomCount):
+                    distance_matrix[i, j] = self.minimum_image_distance( self.atomPositions[i], self.atomPositions[j] )
+            self._distance_matrix = distance_matrix
+            return self._distance_matrix
+        elif'_atomPositions' not in self.__dict__:
+            raise AttributeError("Attribute _atomPositions must be initialized before accessing atomLabelsList.")
+        else:
+            return None
 
     @property
     def latticeType(self):
@@ -72,6 +93,26 @@ class PeriodicSystem(AtomPositionManager):
             return self._latticeType
         elif 'latticeVectors' not in self.__dict__:
             raise AttributeError("Attributes latticeVectors and latticeAngles must be initialized before accessing latticeParameters.")
+
+    @property
+    def atomPositions_fractional(self):
+        if not self._atomPositions_fractional is None:
+            return self._atomPositions_fractional
+        elif self._atomPositions is not None:
+            self._atomPositions_fractional = np.dot(self._atomPositions, self.latticeVectors_inv)
+            return self._atomPositions_fractional
+        elif '_atomPositions' not in self.__dict__:
+            raise AttributeError("Attributes _atomPositions must be initialized before accessing latticeParameters.")
+
+    @property
+    def atomPositions(self):
+        if not self._atomPositions is None:
+            return self._atomPositions
+        elif self._atomPositions_fractional is not None:
+            self._atomPositions = np.dot(self.latticeVectors, self._atomPositions_fractional.T).T
+            return self._atomPositions
+        elif '_atomPositions_fractional' not in self.__dict__:
+            raise AttributeError("Attributes _atomPositions_fractional must be initialized before accessing latticeParameters.")
 
     @property
     def reciprocalLatticeVectors(self):
@@ -129,7 +170,16 @@ class PeriodicSystem(AtomPositionManager):
             return self._latticeVectors
         elif '_latticeParameters' not in self.__dict__ or '_latticeAngles' not in self.__dict__:
             raise AttributeError("Attributes _latticeParameters and _latticeAngles must be initialized before accessing latticeParameters.")
-
+ 
+    @property
+    def latticeVectors_inv(self):
+        if not self._latticeVectors_inv is None:
+            return self._atomPositions_fractional
+        elif self.latticeVectors is not None:
+            self._latticeVectors_inv = np.linalg.inv(self.latticeVectors)
+            return self._latticeVectors_inv
+        elif 'latticeVectors' not in self.__dict__:
+            raise AttributeError("Attributes latticeVectors must be initialized before accessing latticeParameters.")
 
     @property
     def latticeParameters(self):
@@ -161,40 +211,53 @@ class PeriodicSystem(AtomPositionManager):
             return self._cellVolumen
         else:
             return None
-    
-    def minimum_image_distance(self, r1, r2):
-        """
-        Calculate the minimum image distance between two points in a periodic lattice.
-        
-        Parameters:
-        r1, r2 : np.array
-            Cartesian coordinates of the two points.
-        lattice_vectors : np.array of shape (3, 3)
-            The lattice vectors forming the unit cell.
-            
-        Returns:
-        float
-            The minimum image distance between r1 and r2.
-        """
-        r1, r2 = np.array(r1), np.array(r2)
 
-        # Calculate the separation vector
-        delta_r = r2 - r1
-        
-        # Convert to fractional coordinates
-        inv_lattice_vectors = np.linalg.inv(self.latticeVectors)
-        delta_r_frac = np.dot(inv_lattice_vectors, delta_r)
-        
+    def to_fractional_coordinates(self, cart_coords):
+        inv_lattice_matrix = np.linalg.inv(self.latticeVectors)
+        return np.dot(inv_lattice_matrix, cart_coords.T).T
+    
+    def to_cartesian_coordinates(self, frac_coords):
+        return np.dot(self.latticeVectors.T, frac_coords.T).T
+    
+    def distance(self, r1, r2): return self.minimum_image_distance(r1, r2)
+
+    def pack_to_unit_cell(self, ):
         # Apply minimum image convention
-        delta_r_frac = delta_r_frac - np.round(delta_r_frac)
+        self._atomPositions_fractional = self.atomPositions_fractional%1.0
         
         # Convert back to Cartesian coordinates
-        delta_r_mic = np.dot(self.latticeVectors, delta_r_frac)
+        self._atomPositions = np.dot(self.atomPositions_fractional, self.latticeVectors)
+
+    def minimum_image_distance(self, r1, r2, n_max=3):
+        """
+        Calcula la distancia mínima entre dos puntos en un sistema periódico usando NumPy.
         
-        # Calculate the distance
-        distance_mic = np.linalg.norm(delta_r_mic)
+        Parámetros:
+        r1, r2 : arrays de NumPy
+            Las coordenadas cartesianas de los dos puntos.
+        lattice_vectors : matriz de 3x3
+            Los vectores de la red cristalina.
+        n_max : int
+            El número máximo de imágenes a considerar en cada dimensión.
+            
+        Retorna:
+        d_min : float
+            La distancia mínima entre los dos puntos.
+        """
         
-        return distance_mic
+        # Generar todas las combinaciones de índices de celda
+        n_values = np.arange(-n_max, n_max + 1)
+        n_combinations = np.array(np.meshgrid(n_values, n_values, n_values)).T.reshape(-1, 3)
+        
+        # Calcular todas las imágenes del segundo punto
+        r2_images = r2 + np.dot(n_combinations, self.latticeVectors)
+        
+        # Calcular las distancias entre r1 y todas las imágenes de r2
+        distances = np.linalg.norm(r1 - r2_images, axis=1)
+        
+        # Encontrar y devolver la distancia mínima
+        d_min = np.min(distances)
+        return d_min
 
     def cellDuplication(self, factor:np.array=np.array([2,2,1], dtype=np.int64)):
         factor = np.array(factor, dtype=np.int64)
@@ -219,6 +282,36 @@ class PeriodicSystem(AtomPositionManager):
 
         self._atomLabelsList = None
         self._fullAtomLabelString = None
+
+    def find_opposite_atom(self, atom_position, label, tolerance_z=1.8, tolerance=6):
+        """Find the symmetrically opposite atom's index."""
+        # Convert to fractional coordinates and find center
+        lattice_matrix = np.array(self._latticeVectors)
+        atom_frac = self.to_fractional_coordinates(atom_position)
+        inv_lattice_matrix = np.linalg.inv(lattice_matrix)
+        center_frac = np.mean(np.dot(inv_lattice_matrix, self.atomPositions.T).T, axis=0)
+
+        # Find opposite atom in fractional coordinates
+        opposite_atom_position_frac = 2 * center_frac - atom_frac
+        opposite_atom_position = np.dot(lattice_matrix, opposite_atom_position_frac)
+
+        removed_atom_closest_indices, removed_atom_closest_labels, removed_atom_closest_distance = self.find_n_closest_neighbors(atom_position, 4)
+
+        # Calculate distances to find opposite atom
+        distances = np.zeros(self._atomCount)
+        for i, a in enumerate(self.atomPositions):
+            if (self.atomLabelsList[i] == label and
+                np.abs(atom_position[2] - a[2]) >= tolerance_z and
+                np.abs(opposite_atom_position[2] - a[2]) <= tolerance_z):
+
+                closest_indices, closest_labels, closest_distance = self.find_n_closest_neighbors(a, 4)
+                distances[i] = self.compare_chemical_environments(removed_atom_closest_distance, removed_atom_closest_labels,
+                                                            closest_distance, closest_labels)#self.minimum_image_distance(opposite_atom_position, a)
+
+        opposite_atom_index = np.argmax(distances)
+        opposite_atom_distance = np.max(distances)
+
+        return opposite_atom_index if opposite_atom_distance >= 2 else None
 
     def summary(self, v=0):
         text_str = ''
@@ -267,7 +360,11 @@ class PeriodicSystem(AtomPositionManager):
 
         # Ion positions
         self._atomCount = np.array(sum(self._atomCountByType))
-        self._atomPositions = np.array([list(map(float, line.strip().split()[:3])) for line in lines[7+offset:7+offset+self._atomCount]])
+        if self._atomCoordinateType == 'cartesian':
+            self._atomPositions = np.array([list(map(float, line.strip().split()[:3])) for line in lines[7+offset:7+offset+self._atomCount]])
+        else:
+            self._atomPositions_fractional = np.array([list(map(float, line.strip().split()[:3])) for line in lines[7+offset:7+offset+self._atomCount]])
+
         self._atomicConstraints = np.array([list(map(str, line.strip().split()[3:])) for line in lines[7+offset:7+offset+self._atomCount]])
 
         # Check for lattice velocities
@@ -389,6 +486,18 @@ class PeriodicSystem(AtomPositionManager):
         return True
 
 '''
+path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/NiOOH/*OOH surface for pure NiOOH'
+ap = PeriodicSystem(file_location=path+'/SUPERCELL')
+ap.readSIFile()
+#ap.pack_to_unit_cell()
+ap.exportAsPOSCAR(path+'/POSCAR')
+
+path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/NiOOH/*OH surface with Fe(HS)'
+ap = PeriodicSystem(file_location=path+'/SUPERCELL')
+ap.readSIFile()
+ap.exportAsPOSCAR(path+'/POSCAR')
+
+
 path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Eg'
 ap = PeriodicSystem(file_location=path+'/POSCAR_tetragonal')
 ap.readPOSCAR()

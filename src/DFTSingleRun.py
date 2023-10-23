@@ -141,8 +141,8 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
         recommendations["LSCALU"] = lscalu
 
         return recommendations
-
-    def estimate_vasp_memory(self, num_atoms:int=None, num_kpoints:int=None, num_bands:int=None, ncore:int=1):
+    
+    def estimate_vasp_memory(self, num_atoms:int=None, num_kpoints:int=None, num_bands:int=None, ncore:int=1, unit:str='GB'):
         """
         Estimate the amount of RAM needed per node for a VASP calculation.
 
@@ -151,22 +151,40 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
             num_bands (int): Number of electronic bands in the calculation.
             num_kpoints (int): Number of k-points in the Brillouin zone sampling.
             ncore (int): Number of cores working on each orbital (NCORE).
+            unit (str): Desired unit for memory estimation ('KB', 'MB', 'GB').
 
         Returns:
-            float: Estimated RAM needed per node in GB.
+            float: Estimated RAM needed per node in specified unit.
         """
+        
+        if not all(isinstance(x, (int, type(None))) for x in [num_atoms, num_kpoints, num_bands, ncore]):
+            raise ValueError("All numerical inputs must be integers.")
+        
+        conversion_factors = {'KB': 2 ** 0, 'MB': 2 ** 10, 'GB': 2 ** 19}
+        if unit not in conversion_factors:
+            raise ValueError("Invalid unit. Choose among 'KB', 'MB', 'GB'.")
 
+        ncore = ncore if ncore is not None else int(self.InputDFT.parameters.get('NCORE', 1))
         num_bands = num_bands if num_bands is not None else self.estimateNumberOfBands()
         num_kpoints = num_kpoints if num_kpoints is not None else self.estimateNumberOfKPOINTS()
         num_atoms = num_atoms if num_atoms is not None else self.AtomPositionManager.atomCount
 
-        # Estimate the RAM needed for wavefunctions (complex numbers, 8 bytes each)
-        wavefunction_memory = num_atoms * num_bands * num_kpoints * 8  # in bytes
+        # Estimate the RAM needed for wavefunctions (complex numbers, 16 bytes each for safety)
+        wavefunction_memory = num_atoms * num_bands * num_kpoints * 16  # in bytes
 
-        # Convert to GB and multiply by NCORE
-        memory_per_node_gb = (wavefunction_memory / (1024 ** 3)) * ncore  # in GB
+        # Estimate memory for Hamiltonian and overlap matrices (using double precision, 8 bytes)
+        hamiltonian_memory = num_bands * num_bands * num_kpoints * 8  # in bytes
+        
+        # Summing up all contributions
+        total_memory = wavefunction_memory + hamiltonian_memory  # in bytes
 
-        return memory_per_node_gb
+        # Add a safety factor (e.g., 1.2 for 20% extra)
+        safety_factor = 1.2
+
+        # Convert to specified unit and multiply by NCORE
+        memory_per_node = (wavefunction_memory / conversion_factors[unit]) * ncore * safety_factor # in specified unit
+
+        return memory_per_node
 
     def estimate_vasp_runtime(self, num_cores, num_atoms:int=None, num_kpoints:int=None, num_bands:int=None, scaling_factor:float=1e-6):
         """
@@ -205,6 +223,7 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
         """
         
         total_electrons = 0
+
         for element, count in zip(self.AtomPositionManager.uniqueAtomLabels , self.AtomPositionManager.atomCountByType):
             if element not in self.valenceElectrons:
                 raise ValueError(f"Valence electrons for element {element} not provided.")

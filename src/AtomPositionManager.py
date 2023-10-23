@@ -28,8 +28,29 @@ class AtomPositionManager(FileManager):
         self._fullAtomLabelString = None  # FeFeFeNNNNNNNCCCCCCCCCCCCCCCHHHHHHHHHHHHHHHH
         self.__atomPositions_tolerance = 1e-2
 
+        self._distance_matrix = None
+        
+        self._total_charge = None
+        self._magnetization = None
+        self._total_force = None
+        self._E = None
+        self._Edisp = None
+
     @property
-    def atomCount(self):
+    def distance_matrix(self):
+        if self._distance_matrix is not None:
+            return self._distance_matrix
+        elif self._atomPositions is not None:
+            from scipy.spatial.distance import cdist 
+            self._distance_matrix = cdist(self._atomPositions, self._atomPositions, 'euclidean')
+            return self._distance_matrix
+        elif'_atomPositions' not in self.__dict__:
+            raise AttributeError("Attribute _atomPositions must be initialized before accessing atomLabelsList.")
+        else:
+            return None
+
+    @property
+    def scaleFactor(self):
         if self.isnum(self._scaleFactor) or self._scaleFactor is list:
             self._scaleFactor = np.array(self._scaleFactor)
             return np.array(self._scaleFactor)
@@ -39,11 +60,10 @@ class AtomPositionManager(FileManager):
         else:
             return None
 
-
     @property
     def atomCount(self):
         if self._atomCount is not None:
-            return self._atomCount
+            return np.array(self._atomCount)
         elif self._atomPositions is not None: 
             self._atomCount = self._atomPositions.shape[0] 
             return self._atomCount
@@ -91,7 +111,7 @@ class AtomPositionManager(FileManager):
         if '_atomCountByType' not in self.__dict__ or '_uniqueAtomLabels' not in self.__dict__:
             raise AttributeError("Attributes _atomCountByType and _uniqueAtomLabels must be initialized before accessing atomLabelsList.")
         elif self._atomLabelsList is None and not self._atomCountByType is None and not self._uniqueAtomLabels is None: 
-            return [label for count, label in zip(self._atomCountByType, self._uniqueAtomLabels) for _ in range(count)]
+            return np.array([label for count, label in zip(self._atomCountByType, self._uniqueAtomLabels) for _ in range(count)])
         else:
             return  self._atomLabelsList 
 
@@ -100,7 +120,8 @@ class AtomPositionManager(FileManager):
         if '_atomCountByType' not in self.__dict__ or '_uniqueAtomLabels' not in self.__dict__:
             raise AttributeError("Attributes _atomCountByType and _uniqueAtomLabels must be initialized before accessing fullAtomLabelString.")
         elif self._fullAtomLabelString is None and not self._atomCountByType is None and not self._uniqueAtomLabels is None: 
-            return ''.join([label*count for count, label in zip(self._atomCountByType, self._uniqueAtomLabels)])
+            self._fullAtomLabelString = ''.join([label*count for count, label in zip(self._atomCountByType, self._uniqueAtomLabels)])
+            return self._fullAtomLabelString
         else:
             return  self._fullAtomLabelString 
 
@@ -109,6 +130,74 @@ class AtomPositionManager(FileManager):
     
     def convert_to_non_periodic(self):
         return NonPeriodicSystem(**self.attributes)
+
+    def distance(self, r1, r2): return np.linalg.norm(r1, r2)
+
+    def remove_atom(self, atom_index: int):
+        """Remove an atom at the given index."""
+        self._atomPositions = np.delete(self.atomPositions, atom_index, axis=0)
+        self._atomLabelsList = np.delete(self.atomLabelsList, atom_index)
+        self._atomicConstraints = np.delete(self.atomicConstraints, atom_index, axis=0)
+        self._total_charge = np.delete(self.total_charge, atom_index) if self._total_charge is not None else self._total_charge
+        self._magnetization = np.delete(self.magnetization, atom_index) if self._magnetization is not None else self._magnetization
+        self._total_force = np.delete(self.total_force, atom_index) if self._total_force is not None else self._total_force
+        self._atomCount -= 1
+        self._atomCountByType = None
+        self._fullAtomLabelString = None
+        self._uniqueAtomLabels = None
+
+        if self._distance_matrix is not None:
+            self._distance_matrix = np.delete(self._distance_matrix, var, axis=0)  # Eliminar fila
+            self._distance_matrix = np.delete(self._distance_matrix, var, axis=1)  # Eliminar columna
+
+
+    def find_n_closest_neighbors(self, position, n):
+        """Find the n closest neighbors to a given atom."""
+        #distance_matrix = self.distanceamtrix
+        #distances = distance_matrix[atom_index]
+        
+        # Sort the distances and get the indices of the n closest neighbors.
+        # We exclude the first index because it's the atom itself (distance=0).
+        distances = [self.distance( position, a) for a in self.atomPositions ]
+        closest_indices = np.argsort( distances )[:n]
+        
+        # Get the labels and positions of the closest neighbors.
+        closest_labels = [self._atomLabelsList[i] for i in closest_indices]
+        closest_distance = [ distances[i] for i in closest_indices]
+        
+        return closest_indices, closest_labels, closest_distance
+
+    def compare_chemical_environments(self, distances1, labels1, distances2, labels2, label_weights=None, distance_decay=1.0):
+        """
+        Compare two chemical environments and return a similarity score.
+
+        Parameters:
+        - distances1, distances2: List of distances to the atoms in the environments.
+        - labels1, labels2: List of labels indicating the type of each atom in the environments.
+        - label_weights: Dictionary assigning weights to each type of atom label. If None, all weights are set to 1.
+        - distance_decay: A decay factor for the influence of distance in the similarity score.
+
+        Returns:
+        - float: A similarity score. Lower values indicate more similar environments.
+        """
+        if label_weights is None:
+            label_weights = {label: 1.0 for label in set(labels1 + labels2)}
+        
+        # Initialize similarity score
+        similarity_score = 0.0
+
+        for d1, l1 in zip(distances1, labels1):
+            min_diff = float('inf')
+            for d2, l2 in zip(distances2, labels2):
+                if l1 == l2:
+                    diff = np.abs(d1 - d2)
+                    min_diff = min(min_diff, diff)
+            
+            if min_diff != float('inf'):
+                weight = label_weights.get(l1, 1.0)
+                similarity_score += weight * np.exp(-distance_decay * min_diff)
+
+        return similarity_score
 
     def get_plane(self, atom1, atom2, atom3):
         v1 = self.atomPositions[atom1, :] - self.atomPositions[atom2, :]
@@ -152,6 +241,35 @@ class AtomPositionManager(FileManager):
 
         return angle
 
+
+    def group_elements_and_positions(self, atomLabelsList:list=None, atomPositions:list=None):
+        # Verificar que la longitud de element_labels coincide con el número de filas en position_matrix
+        atomLabelsList = atomLabelsList if atomLabelsList is not None else self.atomLabelsList
+        atomPositions = atomPositions if atomPositions is not None else self.atomPositions
+
+        # Crear un diccionario para almacenar los índices de cada tipo de elemento
+        element_indices = {}
+        for i, label in enumerate(atomLabelsList):
+            if label not in element_indices:
+                element_indices[label] = []
+            element_indices[label].append(i)
+
+        # Crear una nueva lista de etiquetas y una nueva matriz de posiciones
+        atomLabelsList_new = []
+        atomPositions_new = []
+        uniqueAtomLabels_new = element_indices.keys()
+        for label in element_indices:
+            atomLabelsList_new.extend([label] * len(element_indices[label]))
+            atomPositions_new.extend(atomPositions[element_indices[label]])
+
+        self._atomLabelsList = atomLabelsList_new
+        self._atomPositions = np.array(atomPositions_new)
+        self._uniqueAtomLabels = None  # [Fe, N, C, H]
+        self._atomCountByType = None  # [n(Fe), n(N), n(C), n(H)]
+        self._fullAtomLabelString = None  # FeFeFeNNNNNNNCCCCCCCCCCCCCCCHHHHHHHHHHHHHHHH
+
+        return True
+
     def atomLabelFilter(self, ID, v=False):  
         return np.array([ True if n in ID else False for n in self.atomLabelsList])
 
@@ -183,9 +301,6 @@ class AtomPositionManager(FileManager):
 
             # Factor de escala
             file.write(f"{' '.join(map(str, self.scaleFactor))}\n")
-            print(f"{' '.join(map(str, self.scaleFactor))}\n")
-            #sf = ' '.join( [str(n) for n in self.scaleFactor])
-            #file.write(f'{sf}\n')
 
             # Vectores de la celda unitaria
             for lv in self.latticeVectors:
@@ -209,31 +324,3 @@ class AtomPositionManager(FileManager):
 
             # Comentario final (opcional)
             file.write('Comment_line\n')
-
-    def group_elements_and_positions(self, atomLabelsList:list=None, atomPositions:list=None):
-        # Verificar que la longitud de element_labels coincide con el número de filas en position_matrix
-        atomLabelsList = atomLabelsList if atomLabelsList is not None else self.atomLabelsList
-        atomPositions = atomPositions if atomPositions is not None else self.atomPositions
-
-        # Crear un diccionario para almacenar los índices de cada tipo de elemento
-        element_indices = {}
-        for i, label in enumerate(atomLabelsList):
-            if label not in element_indices:
-                element_indices[label] = []
-            element_indices[label].append(i)
-
-        # Crear una nueva lista de etiquetas y una nueva matriz de posiciones
-        atomLabelsList_new = []
-        atomPositions_new = []
-        uniqueAtomLabels_new = element_indices.keys()
-        for label in element_indices:
-            atomLabelsList_new.extend([label] * len(element_indices[label]))
-            atomPositions_new.extend(atomPositions[element_indices[label]])
-
-        self._atomLabelsList = atomLabelsList_new
-        self._atomPositions = np.array(atomPositions_new)
-        self._uniqueAtomLabels = None  # [Fe, N, C, H]
-        self._atomCountByType = None  # [n(Fe), n(N), n(C), n(H)]
-        self._fullAtomLabelString = None  # FeFeFeNNNNNNNCCCCCCCCCCCCCCCHHHHHHHHHHHHHHHH
-
-        return True

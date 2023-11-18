@@ -264,3 +264,17 @@ class FileManager:
             print(f"An error occurred while copying the file: {e}")
             return False
 
+    def _copy_shared_attributes(self, shared_attributes, source, destination):
+        """
+        Copies shared attributes from the source object to the destination object.
+
+        :param shared_attributes: List of attribute names to be copied.
+        :param source: The source object from which to copy attributes.
+        :param destination: The destination object to which attributes are copied.
+        """
+        for attr in shared_attributes:
+            if hasattr(source, attr):
+                setattr(destination, attr, getattr(source, attr))
+
+
+

@@ -3,6 +3,7 @@
 # Importaciones para facilitar el acceso a las clases y funciones más importantes
 from .DFTPartition import DFTPartition
 from .SurfaceStatesGenerator import SurfaceStatesGenerator
+from .VacuumStatesGenerator import VacuumStatesGenerator
 
 from .DFTSingleRun import DFTSingleRun
 from .CrystalDefectGenerator import CrystalDefectGenerator

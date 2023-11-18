@@ -15,12 +15,9 @@ except ImportError as e:
 
 # Subclase para sistemas no periódicos
 class NonPeriodicSystem(AtomPositionManager):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, file_location:str=None, name:str=None, **kwargs):
+        super().__init__(name=name, file_location=file_location)
 
     def read_PDB(self, file_path):
         # Implementación
         pass
-
-    def convert_to_periodic(self):
-        return PeriodicSystem(**self.attributes)

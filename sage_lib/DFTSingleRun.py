@@ -27,6 +27,13 @@ except ImportError as e:
     del sys
 
 try:
+    from sage_lib.NonPeriodicSystem import NonPeriodicSystem
+except ImportError as e:
+    import sys
+    sys.stderr.write(f"An error occurred while importing NonPeriodicSystem: {str(e)}\n")
+    del sys
+
+try:
     from sage_lib.OutFileManager import OutFileManager
 except ImportError as e:
     import sys
@@ -62,6 +69,13 @@ except ImportError as e:
     del sys
 
 try:
+    from sage_lib.SingleRun import SingleRun
+except ImportError as e:
+    import sys
+    sys.stderr.write(f"An error occurred while importing SingleRun: {str(e)}\n")
+    del sys
+
+try:
     from sage_lib.FileManager import FileManager
 except ImportError as e:
     import sys
@@ -76,19 +90,12 @@ except ImportError as e:
     del sys
 
 
-class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT tieneu qe ser ma general
+class DFTSingleRun(SingleRun): # el nombre no deberia incluir la palabra DFT tieneu qe ser ma general
     def __init__(self, file_location:str=None, name:str=None, **kwargs):
         super().__init__(name=name, file_location=file_location)
 
         self._containers = []  # Lista para almacenar subcontenedores
-        self._KPointsManager = None
-        self._AtomPositionManager = None
-        self._Out_AtomPositionManager = None
-        self._PotentialManager = None
-        self._InputFileManager = None
-        self._BashScriptManager = None
 
-        self._OutFileManager = None
         self._WaveFileManager = None
         self._ChargeFileManager = None
         
@@ -109,7 +116,7 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
         self.loadStoreManager(InputDFT, 'INCAR', '_InputFileManager', 'readINCAR', v)
         self.loadStoreManager(PeriodicSystem, 'CONTCAR', '_Out_AtomPositionManager', 'readCONTCAR', v)
         self.loadStoreManager(KPointsManager, 'KPOINTS', '_KPointsManager', 'readKPOINTS', v)
-        self.loadStoreManager(BashScriptManager, 'VASPscript.sh', '_BashScriptManager', 'readBashScript', v)
+        self.loadStoreManager(BashScriptManager, 'RUNscript.sh', '_BashScriptManager', 'readBashScript', v)
         self.loadStoreManager(BinaryDataHandler, 'vdw_kernel.bindat', '_vdw_kernel_Handler', 'read_VASP_VDW_Kernel', v)
         self.loadStoreManager(OutFileManager, 'OUTCAR', '_OutFileManager', 'readOUTCAR', v)
         self.loadStoreManager(WaveFileManager, 'WAVECAR', '_WaveFileManager', 'importFileLocation', v)
@@ -117,13 +124,18 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
 
     def exportVASP(self, file_location:str=None, CHGCAR:bool=True, WAVECAR:bool=True, kernel:bool=True):
         file_location = file_location if type(file_location) == str else self.file_location
+
         self.create_directories_for_path(file_location)
 
         if self.KPointsManager:         self.KPointsManager.exportAsKPOINTS(file_location+'/KPOINTS')
-        if self.AtomPositionManager:    self.AtomPositionManager.exportAsPOSCAR(file_location+'/POSCAR')
+        if self.AtomPositionManager:    
+            if isinstance(self.AtomPositionManager, NonPeriodicSystem):
+                self.NonPeriodic_2_Periodic()
+            self.AtomPositionManager.exportAsPOSCAR(file_location+'/POSCAR')
         if self.PotentialManager:       self.PotentialManager.exportAsPOTCAR(file_location+'/POTCAR', self.AtomPositionManager.uniqueAtomLabels )
-        if self.InputFileManager:       self.InputFileManager.exportAsINCAR(file_location+'/INCAR')
-        if self.BashScriptManager:      self.BashScriptManager.exportAsBash(file_location+'/VASPscript.sh')
+        if self.InputFileManager:       self.InputFileManager.exportAsINCAR(file_location+'/INCAR', self.AtomPositionManager.uniqueAtomLabels)
+
+        if self.BashScriptManager:      self.BashScriptManager.exportAsBash(file_location+'/RUNscript.sh')
         if self.vdw_kernel_Handler and kernel:     
                                         self.vdw_kernel_Handler.export_VASP_VDW_Kernel(file_location+'/vdw_kernel.bindat')
         if self.WaveFileManager and WAVECAR:     
@@ -279,6 +291,50 @@ class DFTSingleRun(FileManager): # el nombre no deberia incluir la palabra DFT t
     def estimateNumberOfKPOINTS(self,):
         return np.prod(self.KPointsManager.subdivisions)
 
+    def NonPeriodic_2_Periodic(self, latticeVectors:np.array=None, center:bool=True):
+        """
+        Converts a NonPeriodicSystem instance to a PeriodicSystem instance by creating a new PeriodicSystem 
+        object and copying shared attributes from the NonPeriodicSystem. It then adjusts the atom positions 
+        to ensure that the atom with the lowest coordinate in each axis is at least 6 Angstroms from the origin.
+        Finally, it sets the lattice vectors based on the adjusted atom positions.
+
+        :return: A new instance of PeriodicSystem with shared attributes copied and adjusted atom positions.
+        """ 
+        if isinstance(self.AtomPositionManager, PeriodicSystem): 
+            return self.AtomPositionManager
+
+        # Create a new instance of PeriodicSystem
+        periodic_system = PeriodicSystem()  # Assuming default initialization
+
+        # Shared attributes list
+        shared_attributes = [
+            '_comment', '_atomCount', '_scaleFactor', '_uniqueAtomLabels', '_atomCountByType', 
+            '_selectiveDynamics', '_atomPositions', '_atomicConstraints', '_atomLabelsList', 
+            '_fullAtomLabelString', '_atomPositions_tolerance', '_distance_matrix', '_total_charge', 
+            '_magnetization', '_total_force', '_E', '_Edisp', '_IRdisplacement'
+        ] 
+
+        # Copy shared attributes
+        self._copy_shared_attributes(shared_attributes, self.AtomPositionManager, periodic_system)
+
+        # Adjust atom positions
+        min_coords = np.min(periodic_system.atomPositions, axis=0)
+        max_coords = np.max(periodic_system.atomPositions, axis=0)
+ 
+        periodic_system.atomPositions += (6 - min_coords) if center else 0
+
+        # Set lattice vectors
+        periodic_system.latticeVectors = latticeVectors if latticeVectors is not None else \
+            np.array([  [max_coords[0] + 6, 0, 0], 
+                        [0, max_coords[1] + 6, 0], 
+                        [0, 0, max_coords[2] + 6]])
+
+        periodic_system.atomCoordinateType = 'Cartesian'
+
+        # Update AtomPositionManager
+        self.AtomPositionManager = periodic_system
+
+        return periodic_system
 
 '''
 DSR = DFTSingleRun('/home/akaris/Documents/code/Physics/VASP/v6.1/files/bulk_optimization/Pt/FCC100')

@@ -13,8 +13,21 @@ except ImportError as e:
     del sys
 
 class InputDFT(InputFileManager):
+    """
+    A class for configuring and exporting VASP INCAR files.
+
+    Attributes:
+        parameters (dict): Parameters for the VASP simulation.
+        parameters_data (dict): Additional data about parameters.
+        LDAU (dict): LDAU parameters for different species.
+        file_location (str): Default location for exporting INCAR file.
+        attr_dic (dict): Dictionary for additional attributes.
+        help (dict): Help information for attributes.
+    """
     def __init__(self, file_location:str=None, name:str=None, **kwargs):
         super().__init__(name=name, file_location=file_location)
+
+        self.LDAU = None
 
         self._parameters = {}
     # "Here is a short overview of all parameters currently supported. Parameters which are used frequently are emphasized.
@@ -232,8 +245,53 @@ class InputDFT(InputFileManager):
 
     def summary(self, ): return self.view()
 
-    def exportAsINCAR(self, file_location:str=None):
+    def set_LDAU(self, species: list) -> bool:
+        """
+        Set LDAU parameters for the given species.
+
+        Args:
+            species (list): List of species to set LDAU parameters for.
+
+        Returns:
+            bool: True if the operation is successful.
+        """
+        LDAU = {'L': {}, 'J': {}, 'U': {}}
+
+        for L in ['L', 'J', 'U']:
+            ldaul_param = f'LDAU{L}'
+            if ldaul_param in self.parameters:
+                values = self.parameters[ldaul_param].split()
+                LDAU[L] = {specie: value for specie, value in zip(species, values)}
+
+        self.LDAU = LDAU
+        return True
+
+    def get_LDAU(self, species: list) -> dict:
+        """
+        Retrieve LDAU parameters for the given species.
+
+        Args:
+            species (list): List of species to get LDAU parameters for.
+
+        Returns:
+            dict: LDAU parameters for the species.
+        """
+        if self.LDAU is not None and species is not None:
+            for param in ['J', 'U', 'L']:
+                self.parameters[f'LDAU{param}'] = ' '.join([self.LDAU[param][s] for s in species])
+
+        return self.LDAU
+
+    def exportAsINCAR(self, file_location:str=None, species:list=None):
+        """
+        Export VASP INCAR configuration to a file.
+
+        Args:
+            file_location (str, optional): Location to save the INCAR file. Defaults to self.file_location + 'INCAR'.
+            species (list, optional): List of species for LDAU parameters. Defaults to None.
+        """
         file_location  = file_location  if not file_location  is None else self.file_location+'INCAR'
+        self.get_LDAU(species)
 
         with open(file_location, 'w') as f:
             # Classify parameters
@@ -265,9 +323,12 @@ class InputDFT(InputFileManager):
 if __name__ == "__main__":
     # How to...     
     incar = InputDFT()
-    incar.readINCAR('/home/akaris/Documents/code/Physics/VASP/v6.1/files/INCAR/INCAR')
+    path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/INCAR/INCAR'
+    path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/dataset/CoFeNiOOH_jingzhu/surf_NiFe_3OH_1O/INCAR'
+    incar.readINCAR(path)
+    incar.set_LDAU([  'Fe',   'H',    'K',    'Ni',   'O' ])
     incar.summary()
-    incar.exportAsINCAR('/home/akaris/Documents/code/Physics/VASP/v6.1/files/INCAR/INCAR2')
+    incar.exportAsINCAR('/home/akaris/Documents/code/Physics/VASP/v6.1/files/INCAR/INCAR2', species=[  'Fe',     'Ni',   'O' ])
     print( incar.summary() )
 
 

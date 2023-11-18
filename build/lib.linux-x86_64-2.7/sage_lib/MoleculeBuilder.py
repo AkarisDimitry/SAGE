@@ -65,6 +65,7 @@ class MoleculeBuilder(NonPeriodicSystem):
             atomPositions = self.triatomic_compounds[name]['atomPositions']
             self.build_molecule(atomLabels, atomPositions)
 
+
 '''
 mb = MoleculeBuilder()
 mb.build('H2O')

@@ -56,7 +56,6 @@ class ChargeFileManager(FileManager):
         original_file_location = original_file_location if original_file_location is not None else self.file_location
 
         # Perform the file copy operation.
-        print(file_location, original_file_location)
         self.copy(file_location, original_file_location)
 
         return True

@@ -25,7 +25,8 @@ class BashScriptManager(FileManager):
         self._comment = None
         self._parameters = {'srun':[], 'module':[], 'export':[] }
         self._BatchFile = None
-        self.parameter_descriptions = {
+
+        self._parameter_descriptions = {
         "--nodes": "Number of nodes to be used in the job.",
         "--ntasks-per-node": "Number of tasks to run per node.",
         "--time": "Wall clock time limit for the job.",
@@ -61,8 +62,6 @@ class BashScriptManager(FileManager):
             elif line.startswith("#"):
                 self._comment = line[1:].strip()
 
-
-
     def exportAsBash(self, file_location:str=None):
         # Determine the file location
         file_location = file_location if file_location is not None else self.file_location
@@ -74,6 +73,30 @@ class BashScriptManager(FileManager):
         # Give execute permission to the VASPscript.sh file
         subprocess.run(['chmod', '+x', file_location])
 
+    def makeBash(self, file_location=None, job_name='SAGE_Bash_Script', output_file='SAGE_OutPut.out', error_file='SAGE_error.err', 
+                        nodes:int=None, tasks_per_node:int=None, time_limit=None, conda_env=None, commands=None):
+        file_location = file_location if file_location is not None else self.file_location if self.file_location is not None else '.'
+        conda_env = conda_env if conda_env is not None else []
+        commands = commands if commands is not None else []
+        
+        with open(script_filename, 'w') as file:
+            file.write("#!/bin/bash\n")
+            file.write(f"#SBATCH --job-name={job_name}\n")
+            file.write(f"#SBATCH --output={output_file}\n")
+            file.write(f"#SBATCH --error={error_file}\n")
+            file.write(f"#SBATCH --nodes={nodes}\n")
+            file.write(f"#SBATCH --ntasks-per-node={tasks_per_node}\n")
+            file.write(f"#SBATCH --time={time_limit}\n")
+            file.write("\n")
+            
+            file.write("# Activate the Python environment\n")
+            for env in conda_env:
+                file.write(f"source activate {env}\n")
+            
+            file.write("\n")
+            for command in commands:
+                file.write(f"{command}\n")
+
     def summary(self):
         text_str = "Batch Script Summary:\n"
         for param, value in self._parameters.items():
@@ -83,8 +106,9 @@ class BashScriptManager(FileManager):
         return text_str
 
 '''
-pot = BashScriptManager('/home/akaris/Documents/code/Physics/VASP/v6.1/files/bulk_optimization/Pt/FCC100/script.sh')
+pot = BashScriptManager('/home/akaris/Documents/code/Physics/VASP/v6.1/files/BASH/QUIP.sh')
 pot.readBashScript()
+
 pot.exportAsBash('/home/akaris/Documents/code/Physics/VASP/v6.1/files/bulk_optimization/Pt/FCC100/script1.sh')
 print(pot.parameters)
 print( pot.summary() )

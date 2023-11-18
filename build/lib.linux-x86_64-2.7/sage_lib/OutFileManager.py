@@ -142,13 +142,16 @@ class OutFileManager(FileManager):
             if read_parameters:
                 if keyword_ion.search(line):
                     read_parameters = False
+
                     self.parameters['uniqueAtomLabels'] = uniqueAtomLabels[:len(uniqueAtomLabels)//2]
                     self.parameters['atomCountByType'] = self.parameters['type']
                     APM = PeriodicSystem()
+                    APM._atomCount = self.parameters['NIONS']
+                    APM._uniqueAtomLabels = self.parameters.get('uniqueAtomLabels')
+                    APM._atomCountByType = [ int(n) for n in self.parameters.get('atomCountByType').split(' ') ]
 
                 elif 'POTCAR:' in line:
                     uniqueAtomLabels.append( list(set(re.split(r'[ _]', line)).intersection(self.atomic_id))[0] )
-
                 elif 'NIONS' in line:
                     self.parameters['NIONS'] = int(line_vec[11])
 
@@ -159,12 +162,12 @@ class OutFileManager(FileManager):
             elif keyword_re.search(line):  # Usa el método `search` para buscar cualquiera de las palabras clave en la línea
                     
                 if 'Ionic step' in line:
-                    if APM:
-                        APM._atomCount = self.parameters['NIONS']
-                        APM._uniqueAtomLabels = self.parameters.get('uniqueAtomLabels')
-                        APM._atomCountByType = [ int(n) for n in self.parameters.get('atomCountByType').split(' ') ]
-                        APM_holder.append(APM)
+                    APM_holder.append(APM)
                     APM = PeriodicSystem()
+                    
+                    APM._atomCount = self.parameters['NIONS']
+                    APM._uniqueAtomLabels = self.parameters.get('uniqueAtomLabels')
+                    APM._atomCountByType = [ int(n) for n in self.parameters.get('atomCountByType').split(' ') ]
 
                 elif 'E-fermi' in line:
                     APM._E_fermi = float(line_vec[2])
@@ -188,10 +191,12 @@ class OutFileManager(FileManager):
                 elif '2PiTHz' in line: 
                     _extract_parameter('_IRdisplacement', 2, slice(3, None))
 
+        if APM is not None and not APM in APM_holder: 
+            APM_holder.append(APM)
+
         self._AtomPositionManager = APM_holder
 
     def _update_parameters(self, var_name, value):
-        #print(var_name)
         if var_name in self.parameters_data:
             self.parameters[var_name] = value
 
@@ -224,20 +229,28 @@ class OutFileManager(FileManager):
     def export_configXYZ(self, file_location:str=None, save_to_file:str='w', verbose:bool=False):
         file_location  = file_location if file_location else self.file_location+'_config.xyz'
 
+        #f filter_by_forces:
+        #for i, APM in enumerate(self.AtomPositionManager):
+        #    if np.any(APM.total_force > 10): 
+        #        print(file_location, f'iteration {i}')
+        #        return False
+
         with open(file_location, save_to_file) as f:
             for APM in self.AtomPositionManager:
-                f.write(APM.export_as_xyz(file_location, save_to_file=False, verbose=False))
+                f.write( APM.export_as_xyz(file_location, save_to_file=False, verbose=False) )
 
         if verbose:
             print(f"XYZ content has been saved to {file_location}")
 
-
 '''
+print(123)
+
 o = OutFileManager('/home/akaris/Documents/code/Physics/VASP/v6.1/files/OUTCAR/OUTCAR')
 o.readOUTCAR()
-print( o.InputFileManager.exportAsINCAR() )
+o.export_configXYZ(filter_by_forces=True)
 
-o.export_configXYZ()
+#print( o.InputFileManager.exportAsINCAR() )
+
 
 print(o.AtomPositionManager)
 #print( [ APM.E for APM in o._AtomPositionManager ])

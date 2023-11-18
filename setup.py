@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='sage_lib',  # El nombre del paquete
-    version='0.1.1.5',
+    version='0.1.1.34',
     packages=find_packages(),
     install_requires=[
         'numpy',

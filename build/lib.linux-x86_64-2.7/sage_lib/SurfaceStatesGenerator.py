@@ -93,7 +93,7 @@ class SurfaceStatesGenerator(StatesGeneratorManager):
             atom_index = np.argmax(container_copy.AtomPositionManager.atomPositions[:, 2])
 
             for step in range(1, steps+1):
-                container_copy2 = self.copy_and_update_container(container_copy, f'/disassemble_surface/{n:04d}_{step:03d}', file_location)
+                container_copy2 = self.copy_and_update_container(container_copy, f'/{n:04d}_{step:03d}', file_location)
                 container_copy2.AtomPositionManager.move_atom(atom_index, [0,0,step*step_size]) 
 
                 containers.append( container_copy2 )
@@ -112,7 +112,7 @@ SSG = SurfaceStatesGenerator(path)
 SSG.readVASPFolder(v=False)
 
 #containers = SSG.generate_adsorption_states('MONOATOMIC', ['O'])
-containers = SSG.generate_disassemble_surface(atoms_to_remove=40)
+containers = SSG.generate_disassemble_surface(atoms_to_remove=2)
 SSG.exportVaspPartition()
 print( len(SSG.containers) )
 

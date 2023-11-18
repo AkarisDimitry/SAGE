@@ -11,7 +11,11 @@ sage_lib/DFTEnsemble.py
 sage_lib/DFTPartition.py
 sage_lib/DFTSingleRun.py
 sage_lib/DOSManager.py
+sage_lib/EigenvalueFileManager.py
+sage_lib/FFEnsembleManager.py
+sage_lib/FF_Gap.py
 sage_lib/FileManager.py
+sage_lib/ForceFieldManager.py
 sage_lib/InputClassic.py
 sage_lib/InputDFT.py
 sage_lib/InputFileManager.py
@@ -22,9 +26,11 @@ sage_lib/OutFileManager.py
 sage_lib/PROFileManager.py
 sage_lib/PeriodicSystem.py
 sage_lib/PotentialManager.py
+sage_lib/SingleRun.py
 sage_lib/StatesGeneratorManager.py
 sage_lib/StructureGeneratorManager.py
 sage_lib/SurfaceStatesGenerator.py
+sage_lib/VacuumStatesGenerator.py
 sage_lib/WaveFileManager.py
 sage_lib/__init__.py
 sage_lib/main.py

@@ -38,7 +38,7 @@ class PeriodicSystem(AtomPositionManager):
         self._is_bulk = None 
         
         self._surface_atoms_indices = None
-
+        
     @property
     def surface_atoms_indices(self):
         if self._surface_atoms_indices is not None:

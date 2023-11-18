@@ -27,6 +27,20 @@ except ImportError as e:
     del sys
 
 try:
+    from sage_lib.AtomPositionManager import AtomPositionManager
+except ImportError as e:
+    import sys
+    sys.stderr.write(f"An error occurred while importing AtomPositionManager: {str(e)}\n")
+    del sys
+
+try:
+    from sage_lib.PeriodicSystem import PeriodicSystem
+except ImportError as e:
+    import sys
+    sys.stderr.write(f"An error occurred while importing PeriodicSystem: {str(e)}\n")
+    del sys
+
+try:
     import numpy as np
 except ImportError as e:
     import sys
@@ -47,6 +61,13 @@ except ImportError as e:
     sys.stderr.write(f"An error occurred while importing copy: {str(e)}\n")
     del sys
 
+try:
+    import re
+except ImportError as e:
+    import sys
+    sys.stderr.write(f"An error occurred while importing re: {str(e)}\n")
+    del sys
+
 class DFTPartition(FileManager): # el nombre no deberia incluir la palabra DFT tieneu qe ser ma general
     def __init__(self, file_location:str=None, name:str=None, **kwargs):
         super().__init__(name=name, file_location=file_location)
@@ -61,30 +82,73 @@ class DFTPartition(FileManager): # el nombre no deberia incluir la palabra DFT t
     def empty_container(self, container:object):
         self.containers = []
 
+    def readConfigSetup(self, file_location:str=None, source='VASP', v=False):
+        file_location = file_location if type(file_location) == str else self.file_location
+        
+        DFT_SR = self.readVASPFolder(file_location=file_location, add_container=False, v=v)
+        DFT_SR.InputFileManager.set_LDAU( DFT_SR.AtomPositionManager.uniqueAtomLabels )
+
+        for c_i, container in enumerate(self.containers):
+            container.InputFileManager = DFT_SR.InputFileManager
+            container.KPointsManager = DFT_SR.KPointsManager
+            container.PotentialManager = DFT_SR.PotentialManager
+            container.BashScriptManager = DFT_SR.BashScriptManager
+            container.vdw_kernel_Handler = DFT_SR.vdw_kernel_Handler
+            container.WaveFileManager = DFT_SR.WaveFileManager
+            container.ChargeFileManager = DFT_SR.ChargeFileManager
+
     def readVASPSubFolder(self, file_location:str=None, v=False):
         file_location = file_location if type(file_location) == str else self.file_location
                 
         for root, dirs, files in os.walk(file_location):
-            DFT_SR = self.readVASPFolder(root, v)
-            self.add_container(container=DFT_SR)
+            DFT_SR = self.readVASPFolder(file_location=root, add_container=True, v=v)
             if v: print(root, dirs, files)
 
-    def readVASPFolder(self, file_location:str=None, v=False):
+    def readVASPFolder(self, file_location:str=None, add_container:bool=True, v=False):
         file_location = file_location if type(file_location) == str else self.file_location
 
         DFT_SR = DFTSingleRun(file_location)
         DFT_SR.readVASPDirectory()        
-        self.add_container(container=DFT_SR)
+        if add_container and DFT_SR.AtomPositionManager is not None: 
+            self.add_container(container=DFT_SR)
+
         return DFT_SR
 
-    def exportVaspPartition(self, file_location:str=None): 
+    def NonPeriodic_2_Periodic(self, latticeVectors:np.array):
         for container in self.containers:
-            container.exportVASP()
+            container.NonPeriodic_2_Periodic(latticeVectors)
+
+    def exportVaspPartition(self, file_location:str=None, label:str='fixed'): 
+        for c_i, container in enumerate(self.containers):
+
+            if label == 'enumerate':
+                container.exportVASP(file_location=file_location+f'/{c_i:03d}')
+            if label == 'fixed':
+                container.exportVASP(file_location=file_location)
+
+    def read_configXYZ(self, file_location:str=None, verbose:bool=False):
+        file_location = file_location if type(file_location) == str else self.file_location
+
+        lines =list(self.read_file(file_location,strip=False))
+        container = []
+
+        for i, line in enumerate(lines):
+
+            if line.strip().isdigit():
+                num_atoms = int(line.strip())
+                if num_atoms > 0:
+                    DFT_SR = DFTSingleRun(file_location)
+                    DFT_SR.AtomPositionManager = PeriodicSystem()
+                    DFT_SR.AtomPositionManager.read_configXYZ(lines=lines[i:i+num_atoms+2])
+
+                    container.append(DFT_SR)
+
+        self._containers += container
+        return container
 
     def export_configXYZ(self, file_location:str=None, verbose:bool=False):
         file_location  = file_location if file_location else self.file_location+'_config.xyz'
         with open(file_location, 'w'):pass # Create an empty file
-        
         for container_index, container in enumerate(self.containers):
             if container.OutFileManager is not None:    
                 container.OutFileManager.export_configXYZ(file_location=file_location, save_to_file='a', verbose=False)
@@ -93,7 +157,6 @@ class DFTPartition(FileManager): # el nombre no deberia incluir la palabra DFT t
             print(f"XYZ content has been saved to {file_location}")
 
         return True
-
 
     def summary(self, ) -> str:
         text_str = ''
@@ -198,7 +261,7 @@ class DFTPartition(FileManager): # el nombre no deberia incluir la palabra DFT t
 
     def generate_execution_script_for_each_container(self, directories: list = None, file_location: str = None):
         self.create_directories_for_path(file_location)
-        script_content = self.generate_script_content('VASPscript.sh', directories)
+        script_content = self.generate_script_content('RUNscript.sh', directories)
         self.write_script_to_file(script_content, f"{file_location}/execution_script_for_each_container.py")
 
 
@@ -232,10 +295,17 @@ for directory in directories:
             f.write(script_content)
 
 '''
-path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/OUTCAR'
-path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/dataset/CoFeNiOOH_jingzhu/surf_CoFe_4H_4OH/MAG'
+path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/test/files'
 DP = DFTPartition(path)
-DP.readVASPFolder(v=False)
+DP.readVASPSubFolder(v=False)
+DP.readConfigSetup('/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/test/config')
+DP.exportVaspPartition('/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/test/calcs', label='enumerate')
+DP.generate_execution_script_for_each_container([ f'{n:03d}'for n, c in enumerate(DP.containers) ], '/home/akaris/Documents/code/Physics/VASP/v6.1/files/POSCAR/Cristals/test/calcs')
+
+#DP.read_configXYZ()
+
+path = '/home/akaris/Documents/code/Physics/VASP/v6.1/files/dataset/CoFeNiOOH_jingzhu/surf_CoFe_4H_4OH/MAG'
+DP = DFTPartition(path).
 print(DP.containers[0].AtomPositionManager.pbc)
 DP.generateDFTVariants('band_structure', values=[20])
 DP.exportVaspPartition()

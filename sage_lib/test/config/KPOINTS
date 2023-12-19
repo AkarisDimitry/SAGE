@@ -1,0 +1,5 @@
+Automatic mesh
+0               ! automatic generating mesh
+Monkhorst-Pack  ! Monkhorst-Pack mesh
+ 4  3  2        ! 5 x 5 x 1 M-P mesh
+ 0  0  0        ! no shift of K-mesh

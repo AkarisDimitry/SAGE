@@ -1,0 +1,91 @@
+SYSTEM = CaO
+
+#NUPDOWN = 0
+#vdw-DF mfunctional with exchange functionals optimised for the correlation part by Michaelides group
+LUSE_VDW = .True.  # invoke vdW
+#
+Start parameter for this run:
+ISTART  = 1         ! start job from scratch (see INIWAV)
+INIWAV  = 1         ! Fill wavefunctions arrays with random numbers
+ICHARG = 1         ! Calculat charge density from initial wave function
+LWAVE   = False
+#LCHARG  = False
+
+Electronic relaxation:
+ENCUT = 500
+ENAUG   = 650.0     ! Cutoff energy for the augmentation charge
+ALGO    = Fast    ! A Davidson blocked iteration scheme 
+NELMIN  = 4         ! Minimum number of eletronic selfconsistency (SC) steps
+NELM    = 100        ! Maximum number of electronic SC steps
+NELMDL  = -8        ! Number of NON-selfconsistency steps
+EDIFF   = 1.0E-4    ! Global-break condition for the electronic SC-loop (ELM)
+AMIX    = 0.4
+BMIX    = 1.000
+EDIFFG  = -0.02
+#####Hybrid Functional calculations:
+#####LHFCALC = .TRUE.    ! A hybrid XC potential should be used
+
+#####TIME    = 0.30      ! Trial time step for IALGO=5X
+#####HFLMAX  = 6         ! It might be required to increase, if the system contains f-electrons.
+#####HFSCREEN= 0.300     ! Switch from the PBE0 to HSE03
+#####ENCUT = 500
+
+Calculation mode:
+#PREC    = Accurate  ! Calcululation level (Changes FFT-grids)
+ISPIN   = 2         ! #Non-spin-polarized calculations 
+ADDGRID = .TRUE.    ! PAW flag
+
+#####PREC    = Normal    ! Should not be used for final total energy calculations
+#LREAL   = AUTO      ! Should not be used for final total energy calculations
+#####LMAXMIX = 6         ! PAW flag
+
+Ionic relaxation:
+#NSW = 200
+#EDIFFG  = -0.04      ! stop if all forces are smaller than |EDIFFG|
+#IBRION  = 1          !
+#ISIF = 3
+#POTIM = 0.5
+
+Integration over the Brillouin zone (BZ):
+ISMEAR  = 0          ! Gaussian smearing
+SIGMA   = 0.10 
+
+DOS calculation:
+LORBIT  = 10        ! Calculate the DOS without providing the Wigner Seitz radius
+#NEDOS   = 1001      ! Number of points to calculate the DOS
+
+OUTCAR size:
+NWRITE  = 2         ! Determines how much information will be written in OUTCAR
+
+Key for parallel mode calculation:
+NPAR = 4
+LPLANE = .TRUE.
+
+GGA = OR
+AGGAC    = 0.0000
+
+#IWAVPR = 11  # using when there are 'wavefunction orthogonal band', Simple extrapolation of charge density
+#IWAVPR = 12  # default, extrapolation for the wave functions and the charge density 
+##Ionic Relaxation
+NSW = 200
+IBRION = 2
+ISIF = 3
+POTIM = 0.5
+#
+#TEBEG = 400
+#TEEND = 000
+#SMASS=-3     #NVE
+#SMASS= 2     #NVT
+#SMASS=-1    #annealing or cooling
+#
+# +U
+LDAU=.TRUE.
+LMAXMIX=4
+LDAUTYPE=2
+LDAUPRINT=1
+LDAUL=2 0 0 2 0
+LDAUU=2.5 0.0 0.0 5.0 0.0
+LDAUJ=0.0 0.0 0.0 0.0 0.0
+#ISYM = 0
+#
+MAGMOM = 3 -3 10*0.3 0 0 2 0 0 -2 30*0.3 

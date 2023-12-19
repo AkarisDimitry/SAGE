@@ -1,0 +1,24 @@
+sage export --path OUTCAR/ --source OUTCAR --output_path OUT --output_source xyz --subfolders
+
+sage export --path OUTCAR/ --source OUTCAR --output_path OUT --output_source xyz --subfolders
+
+sage config --path XYZ/config.xyz  --source xyz  --output_path OUT/config_test --output_source VASP --config_path config --config_source VASP --verbose 
+
+# === compression === #
+sage edit_positions --path Position_file/ --source VASP  --output_path OUT/compress_test/ --edit compress --N 10  --compress_min 0.5 0.5 0.5  --compress_max 2.5 2.5 2.5 --output_source VASP
+
+# === rattle === #
+sage edit_positions --edit rattle --path OUT/compress_test --subfolders  --output_path OUT/rattle_compress --output_source VASP --std 0.04 --N 3
+
+# === PLOT RBF === # 
+sage plot --path structures_basic.xyz --source xyz --cutoff 5 --number_of_bins 50 --plot RBF --output_path . --conteiner_index 0
+
+# === CHANGE ID === #
+sage edit_configuration --edit ATOM_ID --path . --source VASP --output_path change  --output_source VASP --ID Fe  --new_ID Ni
+
+# === EXPORT === #
+sage export --path OUTCAR/  --source OUTCAR  --output_path OUT/export.xyz --output_source xyz --subfolders
+
+
+
+
